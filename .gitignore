@@ -1,5 +1,18 @@
-.gitignore
+# Build output
 ft_ping
-en.subject.pdf
+*.o
+*.d
+
+# Local project files
 compile_flags.txt
-.cache
+.cache/
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*~
+
+# Local course material
+en.subject.pdf
