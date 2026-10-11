@@ -16,7 +16,15 @@
 #include <netinet/ip.h>     // struct ip
 #include <netinet/ip_icmp.h>// struct icmphdr / ICMP defs on Linux
 
+typedef struct addrinfo	t_addrinfo;
 
-int	resolve_hostname(const char *hostname);
+
+int	resolve_hostname(const char *hostname, t_addrinfo **res);
+
+int	cleanup(t_addrinfo **res);
+
+int	open_icmp_socket(void);
+
+
 
 #endif

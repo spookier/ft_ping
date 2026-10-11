@@ -10,6 +10,8 @@ compile_flags.txt
 # Editor and OS files
 .vscode/
 .idea/
+.agents/
+.codex/
 .DS_Store
 Thumbs.db
 *~

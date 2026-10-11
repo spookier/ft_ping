@@ -6,7 +6,9 @@ SRC = ./srcs/
 INCS_DIR = ./incs
 
 FILES = $(SRC)main.c \
-		$(SRC)resolve_hostname.c
+		$(SRC)resolve_hostname.c \
+		$(SRC)cleanup.c \
+		$(SRC)icmp.c
 
 OBJ_FILES = $(FILES:.c=.o)
 DEP_FILES = $(OBJ_FILES:.o=.d)
