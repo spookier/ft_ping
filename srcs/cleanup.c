@@ -1,11 +1,11 @@
 #include "ft_ping.h"
 
-int	cleanup(t_addrinfo **res)
+int	cleanup(t_addrinfo **resolved_addr)
 {
-	if (*res != NULL)
-		freeaddrinfo(*res);
+	if (*resolved_addr != NULL)
+		freeaddrinfo(*resolved_addr);
 
-	*res = NULL;
+	*resolved_addr = NULL;
 
 	return(0);
 }

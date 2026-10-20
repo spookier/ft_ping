@@ -15,9 +15,9 @@
 typedef struct addrinfo	t_addrinfo;
 
 
-int	resolve_hostname(const char *hostname, t_addrinfo **res);
+int	resolve_hostname(const char *hostname, t_addrinfo **resolved_addr);
 
-int	cleanup(t_addrinfo **res);
+int	cleanup(t_addrinfo **resolved_addr);
 
 
 

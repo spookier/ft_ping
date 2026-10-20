@@ -1,6 +1,6 @@
 #include "ft_ping.h"
 
-int	resolve_hostname(const char *hostname, t_addrinfo **res)
+int	resolve_hostname(const char *hostname, t_addrinfo **resolved_addr)
 {
 	t_addrinfo			hints;
 	struct sockaddr_in	*addr;
@@ -8,11 +8,11 @@ int	resolve_hostname(const char *hostname, t_addrinfo **res)
 	const char			*str;
 	int					ret;
 
-	*res = NULL;
+	*resolved_addr = NULL;
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_INET; // IPv4 addresses only
 
-	ret = getaddrinfo(hostname, NULL, &hints, res); // finds the IP for hostname, does DNS resolution automatically
+	ret = getaddrinfo(hostname, NULL, &hints, resolved_addr); // finds the IP for hostname, does DNS resolution automatically
 	if(ret != 0)
 	{
 		str = gai_strerror(ret);
@@ -20,7 +20,7 @@ int	resolve_hostname(const char *hostname, t_addrinfo **res)
 		return(1);
 	}
 
-	addr = (struct sockaddr_in *)(*res)->ai_addr; // the cast lets us access that address as IPv4, it does not copy it
+	addr = (struct sockaddr_in *)(*resolved_addr)->ai_addr; // the cast lets us access that address as IPv4, it does not copy it
 	if (inet_ntop(AF_INET, &addr->sin_addr, ip, sizeof(ip)) == NULL) // transforms bytes into printable string
 	{
 		perror("ft_ping: inet_ntop");

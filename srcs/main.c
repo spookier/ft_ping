@@ -3,10 +3,9 @@
 
 int	main(int argc, char **argv)
 {
-	t_addrinfo	*res;
+	t_addrinfo	*resolved_addr;
 
-
-	res = NULL;
+	resolved_addr = NULL;
 
 	if(argc != 2)
 	{
@@ -14,19 +13,19 @@ int	main(int argc, char **argv)
 		return (2);
 	}
 
-	if (resolve_hostname(argv[1], &res) != 0) // find an IPv4 address associated with hostname
+	if (resolve_hostname(argv[1], &resolved_addr) != 0) // find an IPv4 address associated with hostname
 	{
-		cleanup(&res);
+		cleanup(&resolved_addr);
 		return (1);
 	}
 
-	if (exec_icmp() != 0)	// exec the whole ICMP stuff
+	if (exec_icmp(resolved_addr) != 0)	// exec the whole ICMP stuff
 	{
-		cleanup(&res);
+		cleanup(&resolved_addr);
 		return(1);
 	}
 
 
 
-	return (cleanup(&res));
+	return (cleanup(&resolved_addr));
 }
