@@ -54,24 +54,25 @@ static ssize_t	send_icmp(int sock_fd, struct icmphdr *icmpHeader, t_addrinfo *re
 	return(sendto(sock_fd, icmpHeader, sizeof(*icmpHeader), 0, resolved_addr->ai_addr, resolved_addr->ai_addrlen));
 }
 
-
 static ssize_t	receive_icmp(int sock_fd) // receives packet
 {
 	unsigned char		buffer[2048];
 	struct sockaddr_in 	sender;
 	socklen_t 			sender_len;
-
+	ssize_t				received;
 
 	sender_len = sizeof(sender);
 	memset(&sender, 0, sizeof(sender));
 
-	return(recvfrom(sock_fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&sender, &sender_len));
+	received = recvfrom(sock_fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&sender, &sender_len);
+	return(received);
 }
 
 int	exec_icmp(t_addrinfo *resolved_addr) // opens the socket, prepares the header, sends it and waits for a packet
 {
 	struct icmphdr	icmpHeader;
 	int				sock_fd;
+	ssize_t			received;
 
 
 	sock_fd = open_icmp_socket();
@@ -87,7 +88,8 @@ int	exec_icmp(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 		return(1);
 	}
 
-	if(receive_icmp(sock_fd) == -1)
+	received = receive_icmp(sock_fd);
+	if(received == -1)
 	{
 		perror("ft_ping: recv");
 		close(sock_fd);
