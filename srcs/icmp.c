@@ -1,6 +1,6 @@
 #include "icmp.h"
 
-static uint16_t checksum(const void *data, size_t len)
+static uint16_t checksum(const void *data, size_t len) // calculates a value used to check if the packet was damaged
 {
 	const uint8_t	*buf = data;
 	uint32_t		sum;
@@ -22,7 +22,7 @@ static uint16_t checksum(const void *data, size_t len)
 	return ((uint16_t)~sum);
 }
 
-static int	open_icmp_socket()
+static int	open_icmp_socket() // opens a raw socket for ICMP packets
 {
 	int	sock_fd;
 
@@ -35,7 +35,7 @@ static int	open_icmp_socket()
 	return (sock_fd);
 }
 
-static void create_icmp_header(struct icmphdr *icmpHeader) // setup ICMP header
+static void create_icmp_header(struct icmphdr *icmpHeader) // sets up the ICMP header
 {
 	uint16_t identifier;
 
@@ -49,18 +49,30 @@ static void create_icmp_header(struct icmphdr *icmpHeader) // setup ICMP header
 	icmpHeader->checksum = htons(checksum(icmpHeader, sizeof(*icmpHeader)));
 }
 
-static ssize_t	send_icmp(int sock_fd, struct icmphdr *icmpHeader, t_addrinfo *resolved_addr)
+static ssize_t	send_icmp(int sock_fd, struct icmphdr *icmpHeader, t_addrinfo *resolved_addr) // sends the ICMP header to destination
 {
-	ssize_t size;
-	size = sendto(sock_fd, icmpHeader, sizeof(*icmpHeader), 0, resolved_addr->ai_addr, resolved_addr->ai_addrlen);
-	return(size);
+	return(sendto(sock_fd, icmpHeader, sizeof(*icmpHeader), 0, resolved_addr->ai_addr, resolved_addr->ai_addrlen));
 }
 
-int	exec_icmp(t_addrinfo *resolved_addr)
+
+static ssize_t	receive_icmp(int sock_fd) // receives packet
+{
+	unsigned char		buffer[2048];
+	struct sockaddr_in 	sender;
+	socklen_t 			sender_len;
+
+
+	sender_len = sizeof(sender);
+	memset(&sender, 0, sizeof(sender));
+
+	return(recvfrom(sock_fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&sender, &sender_len));
+}
+
+int	exec_icmp(t_addrinfo *resolved_addr) // opens the socket, prepares the header, sends it and waits for a packet
 {
 	struct icmphdr	icmpHeader;
 	int				sock_fd;
-	ssize_t			sent;
+
 
 	sock_fd = open_icmp_socket();
 	if (sock_fd == -1)
@@ -68,13 +80,20 @@ int	exec_icmp(t_addrinfo *resolved_addr)
 
 	create_icmp_header(&icmpHeader);
 
-	sent = send_icmp(sock_fd, &icmpHeader, resolved_addr);
-	if(sent == -1)
+	if(send_icmp(sock_fd, &icmpHeader, resolved_addr) == -1)
 	{
 		perror("ft_ping: sendto");
 		close(sock_fd);
 		return(1);
 	}
+
+	if(receive_icmp(sock_fd) == -1)
+	{
+		perror("ft_ping: recv");
+		close(sock_fd);
+		return(1);
+	}
+
 
 	close(sock_fd);
 	return (0);
