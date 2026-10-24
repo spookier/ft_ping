@@ -54,9 +54,10 @@ static ssize_t	send_icmp(int sock_fd, struct icmphdr *icmpHeader, t_addrinfo *re
 	return(sendto(sock_fd, icmpHeader, sizeof(*icmpHeader), 0, resolved_addr->ai_addr, resolved_addr->ai_addrlen));
 }
 
-static int	inspect_packet(const unsigned char *buffer, size_t received) // inspects the received packet
+static int	inspect_packet(const unsigned char *buffer, size_t received, const struct icmphdr *icmpHeader) // inspects the received packet
 {
-	size_t	ipv4_len;
+	size_t			ipv4_len;
+	struct icmphdr 	icmp_reply;
 
 	if (received < 20 || (buffer[0] >> 4) != 4)	// checks if first half-byte is IPv4
 		return (-1);
@@ -70,11 +71,19 @@ static int	inspect_packet(const unsigned char *buffer, size_t received) // inspe
 	if (received < ipv4_len + 8) // check if we got the IP header + 8 bytes for ICMP header
 		return (-1);
 
-
 	if(buffer[ipv4_len] == ICMP_ECHOREPLY)
 	{
-		// ECHO REPLY
-		return(0);
+		memcpy(&icmp_reply, &buffer[ipv4_len], sizeof(icmp_reply)); // we transform buffer into a struct for ez access
+
+		if(icmp_reply.code == 0 && icmp_reply.un.echo.id == icmpHeader->un.echo.id && icmp_reply.un.echo.sequence == icmpHeader->un.echo.sequence) // check if reply is same as request
+		{
+			if(checksum(&buffer[ipv4_len], received - ipv4_len) == 0) // checks for corruption, if ICMP is intact
+			{
+
+				return(0);
+			}
+		}
+		return(2);
 	}
 	else
 	{
@@ -83,15 +92,17 @@ static int	inspect_packet(const unsigned char *buffer, size_t received) // inspe
 	}
 }
 
-static ssize_t	receive_icmp(int sock_fd) // receives packet
+static ssize_t	receive_icmp(int sock_fd, const struct icmphdr *icmpHeader, const t_addrinfo *resolved_addr) // receives packet
 {
-	unsigned char		buffer[2048];
-	struct sockaddr_in 	sender;
-	socklen_t 			sender_len;
-	ssize_t				received;
-	int					ret;
+	unsigned char				buffer[2048];
+	struct sockaddr_in 			sender;
+	socklen_t 					sender_len;
+	ssize_t						received;
+	int							ret;
+	const struct sockaddr_in 	*destination;
 
 	memset(&sender, 0, sizeof(sender));
+	destination = (const struct sockaddr_in *)resolved_addr->ai_addr;
 
 	while(1)		// awaiting packet loop
 	{
@@ -103,14 +114,17 @@ static ssize_t	receive_icmp(int sock_fd) // receives packet
 			return (-1);
 		}
 
-		ret = inspect_packet(buffer, (size_t)received);
-		if(ret == 0)
+		ret = inspect_packet(buffer, (size_t)received, icmpHeader);
+		if(ret == 0) // this packet is an answer to my ping
 		{
-			return(received);
+			if(sender.sin_addr.s_addr == destination->sin_addr.s_addr)
+			{
+				return(received);
+			}
 		}
-		else
+		else					// this packet is something else, so reloop
 		{
-			continue ;			// retry if packet unusable or diff msg type
+			continue ;
 		}
 	}
 }
@@ -134,13 +148,12 @@ int	exec_icmp(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 		return(1);
 	}
 
-	received = receive_icmp(sock_fd);
+	received = receive_icmp(sock_fd, &icmpHeader, resolved_addr);
 	if(received == -1)
 	{
 		close(sock_fd);
 		return(1);
 	}
-
 
 	close(sock_fd);
 	return (0);
