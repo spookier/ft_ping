@@ -62,7 +62,7 @@ static int	inspect_packet(const unsigned char *buffer, size_t received) // inspe
 		return (-1);
 
 	// [IP HEADER][ICMP HEADER]
-	ipv4_len = (buffer[0] & 0x0F) * 4; // we get the last half-byte, * 4 to make it a byte, we now know end of IP packet
+	ipv4_len = (buffer[0] & 0x0F) * 4; // we get the last half-byte, * 4 to know end of IPv4 packet
 
 	if (ipv4_len < 20) // an IPv4 header must be at least 20 bytes
 		return (-1);
@@ -70,9 +70,17 @@ static int	inspect_packet(const unsigned char *buffer, size_t received) // inspe
 	if (received < ipv4_len + 8) // check if we got the IP header + 8 bytes for ICMP header
 		return (-1);
 
-	printf("type: %d\n", buffer[ipv4_len]);
 
-	return (0);
+	if(buffer[ipv4_len] == ICMP_ECHOREPLY)
+	{
+		// ECHO REPLY
+		return(0);
+	}
+	else
+	{
+		// Anything else, ignore
+		return(2);
+	}
 }
 
 static ssize_t	receive_icmp(int sock_fd) // receives packet
@@ -81,16 +89,30 @@ static ssize_t	receive_icmp(int sock_fd) // receives packet
 	struct sockaddr_in 	sender;
 	socklen_t 			sender_len;
 	ssize_t				received;
+	int					ret;
 
-	sender_len = sizeof(sender);
 	memset(&sender, 0, sizeof(sender));
 
-	received = recvfrom(sock_fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&sender, &sender_len);
+	while(1)		// awaiting packet loop
+	{
+		sender_len = sizeof(sender);
+		received = recvfrom(sock_fd, buffer, sizeof(buffer), 0,(struct sockaddr *)&sender, &sender_len);
+		if (received == -1)
+		{
+			perror("ft_ping: recv");
+			return (-1);
+		}
 
-	if (received > 0)
-		inspect_packet(buffer, (size_t)received);
-
-	return (received);
+		ret = inspect_packet(buffer, (size_t)received);
+		if(ret == 0)
+		{
+			return(received);
+		}
+		else
+		{
+			continue ;			// retry if packet unusable or diff msg type
+		}
+	}
 }
 
 int	exec_icmp(t_addrinfo *resolved_addr) // opens the socket, prepares the header, sends it and waits for a packet
@@ -115,7 +137,6 @@ int	exec_icmp(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 	received = receive_icmp(sock_fd);
 	if(received == -1)
 	{
-		perror("ft_ping: recv");
 		close(sock_fd);
 		return(1);
 	}
