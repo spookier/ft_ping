@@ -54,6 +54,27 @@ static ssize_t	send_icmp(int sock_fd, struct icmphdr *icmpHeader, t_addrinfo *re
 	return(sendto(sock_fd, icmpHeader, sizeof(*icmpHeader), 0, resolved_addr->ai_addr, resolved_addr->ai_addrlen));
 }
 
+static int	inspect_packet(const unsigned char *buffer, size_t received) // inspects the received packet
+{
+	size_t	ipv4_len;
+
+	if (received < 20 || (buffer[0] >> 4) != 4)	// checks if first half-byte is IPv4
+		return (-1);
+
+	// [IP HEADER][ICMP HEADER]
+	ipv4_len = (buffer[0] & 0x0F) * 4; // we get the last half-byte, * 4 to make it a byte, we now know end of IP packet
+
+	if (ipv4_len < 20) // an IPv4 header must be at least 20 bytes
+		return (-1);
+
+	if (received < ipv4_len + 8) // check if we got the IP header + 8 bytes for ICMP header
+		return (-1);
+
+	printf("type: %d\n", buffer[ipv4_len]);
+
+	return (0);
+}
+
 static ssize_t	receive_icmp(int sock_fd) // receives packet
 {
 	unsigned char		buffer[2048];
@@ -65,7 +86,11 @@ static ssize_t	receive_icmp(int sock_fd) // receives packet
 	memset(&sender, 0, sizeof(sender));
 
 	received = recvfrom(sock_fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&sender, &sender_len);
-	return(received);
+
+	if (received > 0)
+		inspect_packet(buffer, (size_t)received);
+
+	return (received);
 }
 
 int	exec_icmp(t_addrinfo *resolved_addr) // opens the socket, prepares the header, sends it and waits for a packet
@@ -73,7 +98,6 @@ int	exec_icmp(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 	struct icmphdr	icmpHeader;
 	int				sock_fd;
 	ssize_t			received;
-
 
 	sock_fd = open_icmp_socket();
 	if (sock_fd == -1)
