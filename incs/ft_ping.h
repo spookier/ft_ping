@@ -12,6 +12,8 @@
 #include <arpa/inet.h>      // inet_ntop, htons, ntohs
 #include <netinet/in.h>     // sockaddr_in
 
+#include <time.h>
+
 typedef struct addrinfo	t_addrinfo;
 
 

@@ -134,12 +134,21 @@ int	exec_icmp(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 	struct icmphdr	icmpHeader;
 	int				sock_fd;
 	ssize_t			received;
+	t_timespec		sent_at;
+	t_timespec		received_at;
+	double			rtt_time;
 
 	sock_fd = open_icmp_socket();
 	if (sock_fd == -1)
 		return (1);
 
 	create_icmp_header(&icmpHeader);
+
+	if(clock_gettime(CLOCK_MONOTONIC, &sent_at) == -1)	 // RTT countdown start
+	{
+		close(sock_fd);
+		return(1);
+	}
 
 	if(send_icmp(sock_fd, &icmpHeader, resolved_addr) == -1)
 	{
@@ -155,6 +164,16 @@ int	exec_icmp(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 		return(1);
 	}
 
+	if(clock_gettime(CLOCK_MONOTONIC, &received_at) == -1)	 // RTT countdown end
+	{
+		close(sock_fd);
+		return(1);
+	}
+
+	rtt_time = (received_at.tv_sec - sent_at.tv_sec) * 1000.0; // convert s to ms
+	rtt_time += (received_at.tv_nsec - sent_at.tv_nsec) / 1000000.0; // convert nanoseconds to ms
+
+	printf("%f\n", rtt_time);
 	close(sock_fd);
 	return (0);
 }
