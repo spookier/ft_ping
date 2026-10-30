@@ -92,7 +92,7 @@ static int	inspect_packet(const unsigned char *buffer, size_t received, const st
 	}
 }
 
-static ssize_t	receive_icmp(int sock_fd, const struct icmphdr *icmpHeader, const t_addrinfo *resolved_addr) // receives packet
+static ssize_t	receive_icmp(int sock_fd, const struct icmphdr *icmpHeader, const t_addrinfo *resolved_addr, const t_timespec *sent_at) // receives packet
 {
 	unsigned char				buffer[2048];
 	struct sockaddr_in 			sender;
@@ -100,19 +100,68 @@ static ssize_t	receive_icmp(int sock_fd, const struct icmphdr *icmpHeader, const
 	ssize_t						received;
 	int							ret;
 	const struct sockaddr_in 	*destination;
+	t_timespec 					deadline;
+	t_timespec 					now;
+	double						remaining_ms;
+	int							timeout_ms;
+	struct pollfd				poll_fd;
+
 
 	memset(&sender, 0, sizeof(sender));
 	destination = (const struct sockaddr_in *)resolved_addr->ai_addr;
 
+	deadline.tv_sec = sent_at->tv_sec + 2;
+	deadline.tv_nsec = sent_at->tv_nsec;
+
+	poll_fd.fd = sock_fd;			// we poll() our socketfd
+	poll_fd.events = POLLIN;		// "tell me when there's data to read"
+
 	while(1)		// awaiting packet loop
 	{
 		sender_len = sizeof(sender);
-		received = recvfrom(sock_fd, buffer, sizeof(buffer), 0,(struct sockaddr *)&sender, &sender_len);
-		if (received == -1)
+
+		if(clock_gettime(CLOCK_MONOTONIC, &now) == -1)	// get time to calculate waiting time
 		{
-			perror("ft_ping: recv");
+			perror("ft_ping: clock_gettime");
+			return(-1);
+		}
+
+		remaining_ms = (deadline.tv_sec - now.tv_sec) * 1000.0; // seconds left, converted to ms
+		remaining_ms += (deadline.tv_nsec - now.tv_nsec) / 1000000.0; // add the nanosecond difference in ms
+
+		if (remaining_ms <= 0) // deadline reached, stop waiting
+			return (0);
+
+		timeout_ms = (int)remaining_ms; // keep the whole milliseconds
+		if (timeout_ms < remaining_ms) // round up if there was a fractional part
+			timeout_ms++;
+
+		ret = poll(&poll_fd, 1, timeout_ms);
+		if(ret == -1)
+		{
+			printf("ft_ping: poll: %s\n", strerror(errno));
 			return (-1);
 		}
+
+		if(ret == 0) // timeout, no packet arrived
+			return (0);
+		if(ret > 0 && (poll_fd.revents & POLLIN) != 0) // data is ready to read
+		{
+			sender_len = sizeof(sender);
+			received = recvfrom(sock_fd, buffer, sizeof(buffer), 0,(struct sockaddr *)&sender, &sender_len);
+			if (received == -1)
+			{
+				perror("ft_ping: recv");
+				return (-1);
+			}
+		}
+		else // socket woke up without readable data
+		{
+			printf("ft_ping: poll: socket is not readable\n");
+			return (-1);
+		}
+
+
 
 		ret = inspect_packet(buffer, (size_t)received, icmpHeader);
 		if(ret == 0) // this packet is an answer to my ping
@@ -146,6 +195,7 @@ int	exec_icmp(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 
 	if(clock_gettime(CLOCK_MONOTONIC, &sent_at) == -1)	 // RTT countdown start
 	{
+		perror("ft_ping: clock_gettime");
 		close(sock_fd);
 		return(1);
 	}
@@ -157,21 +207,28 @@ int	exec_icmp(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 		return(1);
 	}
 
-	received = receive_icmp(sock_fd, &icmpHeader, resolved_addr);
+	received = receive_icmp(sock_fd, &icmpHeader, resolved_addr, &sent_at);
 	if(received == -1)
 	{
+		close(sock_fd);
+		return(1);
+	}
+	if(received == 0) // no reply arrived before the deadline
+	{
+		printf("ft_ping: request timed out\n");
 		close(sock_fd);
 		return(1);
 	}
 
 	if(clock_gettime(CLOCK_MONOTONIC, &received_at) == -1)	 // RTT countdown end
 	{
+		perror("ft_ping: clock_gettime");
 		close(sock_fd);
 		return(1);
 	}
 
 	rtt_time = (received_at.tv_sec - sent_at.tv_sec) * 1000.0; // convert s to ms
-	rtt_time += (received_at.tv_nsec - sent_at.tv_nsec) / 1000000.0; // convert nanoseconds to ms
+	rtt_time += (received_at.tv_nsec - sent_at.tv_nsec) / 1000000.0; // convert nanoseconds to ms, add the diff
 
 	printf("%f\n", rtt_time);
 	close(sock_fd);

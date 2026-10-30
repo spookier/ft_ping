@@ -7,6 +7,8 @@
 # include <stdio.h>
 # include <string.h>
 # include <time.h>
+# include <poll.h>
+# include <errno.h>
 # include <sys/types.h>
 # include <sys/socket.h>
 # include <sys/time.h>
