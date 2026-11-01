@@ -8,7 +8,9 @@ INCS_DIR = ./incs
 FILES = $(SRC)main.c \
 		$(SRC)resolve_hostname.c \
 		$(SRC)cleanup.c \
-		$(SRC)icmp.c
+		$(SRC)icmp.c \
+		$(SRC)icmp_packet.c \
+		$(SRC)icmp_receive.c
 
 OBJ_FILES = $(FILES:.c=.o)
 DEP_FILES = $(OBJ_FILES:.o=.d)
