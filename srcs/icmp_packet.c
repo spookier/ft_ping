@@ -22,7 +22,7 @@ static uint16_t icmp_checksum(const void *data, size_t len) // calculates a valu
 	return ((uint16_t)~sum);
 }
 
-void icmp_create_header(struct icmphdr *icmp_header) // sets up the ICMP header
+void icmp_create_header(struct icmphdr *icmp_header, int sequence_nb) // sets up the ICMP header
 {
 	uint16_t identifier;
 
@@ -32,7 +32,7 @@ void icmp_create_header(struct icmphdr *icmp_header) // sets up the ICMP header
 
 	identifier = getpid() & 0xFFFF;
 	icmp_header->un.echo.id = htons(identifier);
-	icmp_header->un.echo.sequence = htons(1);
+	icmp_header->un.echo.sequence = htons(sequence_nb);
 	icmp_header->checksum = htons(icmp_checksum(icmp_header, sizeof(*icmp_header)));
 }
 

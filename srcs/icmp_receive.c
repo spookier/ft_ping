@@ -56,7 +56,7 @@ static int	icmp_wait_for_packet(int sock_fd, const t_timespec *deadline)
 	return (1);
 }
 
-ssize_t	icmp_receive(int sock_fd, const struct icmphdr *icmp_header, const t_addrinfo *resolved_addr, const t_timespec *sent_at, t_IcmpProbe *probes, size_t used_count, t_IcmpProbe **matched_probe) // receives packet
+ssize_t	icmp_receive(int sock_fd, const struct icmphdr *icmp_header, const t_addrinfo *resolved_addr, const t_timespec *deadline, t_IcmpProbe *probes, size_t used_count, t_IcmpProbe **matched_probe) // receives packet
 {
 	unsigned char				buffer[2048];
 	struct sockaddr_in 			sender;
@@ -64,20 +64,16 @@ ssize_t	icmp_receive(int sock_fd, const struct icmphdr *icmp_header, const t_add
 	ssize_t						received;
 	int							ret;
 	const struct sockaddr_in 	*destination;
-	t_timespec 					deadline;
 	uint16_t 					reply_sequence;
 	t_IcmpProbe					*probe;
 
 	memset(&sender, 0, sizeof(sender));
 	destination = (const struct sockaddr_in *)resolved_addr->ai_addr;
 
-	// stop waiting 2s after sending, even if other packets arrive
-	deadline.tv_sec = sent_at->tv_sec + 2;
-	deadline.tv_nsec = sent_at->tv_nsec;
 
 	while(1)		// awaiting packet loop
 	{
-		ret = icmp_wait_for_packet(sock_fd, &deadline);
+		ret = icmp_wait_for_packet(sock_fd, deadline);
 		if (ret <= 0)
 			return (ret);
 
