@@ -1,5 +1,18 @@
 #include "icmp.h"
 
+static t_IcmpProbe *find_probe(t_IcmpProbe *probes, uint16_t target, size_t used_count) // finds a saved probe by its sequence number
+{
+	for(size_t i = 0; i < used_count; ++i)
+	{
+		if(target == probes[i].sequence)
+		{
+			return(&probes[i]); // return the matching probe
+		}
+	}
+
+	return(NULL); // no matching probe was found
+}
+
 // returns 1 when readable, 0 on timeout, or -1 on error
 static int	icmp_wait_for_packet(int sock_fd, const t_timespec *deadline)
 {
@@ -26,6 +39,7 @@ static int	icmp_wait_for_packet(int sock_fd, const t_timespec *deadline)
 
 	poll_fd.fd = sock_fd; // we poll() our socketfd
 	poll_fd.events = POLLIN; // "tell me when there's data to read"
+
 	ret = poll(&poll_fd, 1, timeout_ms);
 	if(ret == -1)
 	{
@@ -42,7 +56,7 @@ static int	icmp_wait_for_packet(int sock_fd, const t_timespec *deadline)
 	return (1);
 }
 
-ssize_t	icmp_receive(int sock_fd, const struct icmphdr *icmp_header, const t_addrinfo *resolved_addr, const t_timespec *sent_at) // receives packet
+ssize_t	icmp_receive(int sock_fd, const struct icmphdr *icmp_header, const t_addrinfo *resolved_addr, const t_timespec *sent_at, t_IcmpProbe *probes, size_t used_count, t_IcmpProbe **matched_probe) // receives packet
 {
 	unsigned char				buffer[2048];
 	struct sockaddr_in 			sender;
@@ -51,11 +65,13 @@ ssize_t	icmp_receive(int sock_fd, const struct icmphdr *icmp_header, const t_add
 	int							ret;
 	const struct sockaddr_in 	*destination;
 	t_timespec 					deadline;
+	uint16_t 					reply_sequence;
+	t_IcmpProbe					*probe;
 
 	memset(&sender, 0, sizeof(sender));
 	destination = (const struct sockaddr_in *)resolved_addr->ai_addr;
 
-	/* stop waiting 2s after sending, even if other packets arrive */
+	// stop waiting 2s after sending, even if other packets arrive
 	deadline.tv_sec = sent_at->tv_sec + 2;
 	deadline.tv_nsec = sent_at->tv_nsec;
 
@@ -73,11 +89,23 @@ ssize_t	icmp_receive(int sock_fd, const struct icmphdr *icmp_header, const t_add
 			return (-1);
 		}
 
-		ret = icmp_inspect_packet(buffer, (size_t)received, icmp_header);
-		if(ret == 0) // this packet is an answer to my ping
+		ret = icmp_inspect_packet(buffer, (size_t)received, icmp_header, &reply_sequence);
+		if (ret == 0) // this packet is an answer to my ping
 		{
-			if(sender.sin_addr.s_addr == destination->sin_addr.s_addr)
+			if(sender.sin_addr.s_addr == destination->sin_addr.s_addr)	// checks if packet is from the IP we pinged
 			{
+				probe = find_probe(probes, reply_sequence, used_count); // finds the saved probe with the same sequence as the reply
+				if (probe == NULL)
+					continue ;
+
+				if (probe->replied == 0)
+				{
+					probe->replied = 1;
+				}
+				else
+					continue ;
+
+				*matched_probe = probe;  // make it possible for icmp_exec() to know which saved probe received the reply
 				return(received);
 			}
 		}

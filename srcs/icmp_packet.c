@@ -36,10 +36,11 @@ void icmp_create_header(struct icmphdr *icmp_header) // sets up the ICMP header
 	icmp_header->checksum = htons(icmp_checksum(icmp_header, sizeof(*icmp_header)));
 }
 
-int	icmp_inspect_packet(const unsigned char *buffer, size_t received, const struct icmphdr *icmp_header) // inspects the received packet
+int	icmp_inspect_packet(const unsigned char *buffer, size_t received, const struct icmphdr *icmp_header, uint16_t *reply_sequence) // inspects the received packet
 {
 	size_t			ipv4_len;
 	struct icmphdr 	icmp_reply;
+
 
 	if (received < 20 || (buffer[0] >> 4) != 4)	// checks if first half-byte is IPv4
 		return (-1);
@@ -57,11 +58,11 @@ int	icmp_inspect_packet(const unsigned char *buffer, size_t received, const stru
 	{
 		memcpy(&icmp_reply, &buffer[ipv4_len], sizeof(icmp_reply)); // we transform buffer into a struct for ez access
 
-		if(icmp_reply.code == 0 && icmp_reply.un.echo.id == icmp_header->un.echo.id && icmp_reply.un.echo.sequence == icmp_header->un.echo.sequence) // check if reply is same as request
+		if(icmp_reply.code == 0 && icmp_reply.un.echo.id == icmp_header->un.echo.id) // check if reply is same as request
 		{
 			if(icmp_checksum(&buffer[ipv4_len], received - ipv4_len) == 0) // checks for corruption, if ICMP is intact
 			{
-
+				*reply_sequence = ntohs(icmp_reply.un.echo.sequence);		// save our received seq to compare it with storage
 				return(0);
 			}
 		}

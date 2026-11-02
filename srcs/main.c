@@ -19,7 +19,7 @@ int	main(int argc, char **argv)
 		return (1);
 	}
 
-	if (icmp_run(resolved_addr) != 0)	// exec the whole ICMP stuff
+	if (icmp_exec(resolved_addr) != 0)	// exec the whole ICMP stuff
 	{
 		cleanup(&resolved_addr);
 		return(1);
