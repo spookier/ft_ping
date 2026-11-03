@@ -54,7 +54,12 @@ int	icmp_exec(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 	sa.sa_handler = handler;
 	sigemptyset(&sa.sa_mask);
 
-    sigaction(SIGINT, &sa, NULL);
+	if (sigaction(SIGINT, &sa, NULL) == -1)
+	{
+		perror("ft_ping: sigaction");
+		close(sock_fd);
+		return (1);
+	}
 
 	i = 1;
 	while(i <= 4 && stop_requested == 0)
