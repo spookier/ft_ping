@@ -1,5 +1,7 @@
 #include "icmp.h"
 
+volatile sig_atomic_t	stop_requested = 0;			// signal variable for ctrl+c
+
 static int	icmp_open_socket() // opens a raw socket for ICMP packets
 {
 	int	sock_fd;
@@ -18,27 +20,46 @@ static ssize_t	icmp_send(int sock_fd, struct icmphdr *icmp_header, t_addrinfo *r
 	return(sendto(sock_fd, icmp_header, sizeof(*icmp_header), 0, resolved_addr->ai_addr, resolved_addr->ai_addrlen));
 }
 
+void handler(int sig)
+{
+    (void)sig;
+    stop_requested = 1;                     // just set the flag
+}
+
 int	icmp_exec(t_addrinfo *resolved_addr) // opens the socket, prepares the header, sends it and waits for a packet
 {
-	struct icmphdr	icmp_header;
-	int				sock_fd;
-	ssize_t			received;
-	t_timespec		sent_at;
-	t_timespec		received_at;
-	double			rtt_ms;
-	double			elapsed_s;
-	t_IcmpProbe 	probes[1024] = {0};
-	t_IcmpProbe		*matched_probe = NULL;
-	size_t			used_count = 0;
-	t_timespec 		deadline;
-
+	struct icmphdr			icmp_header;
+	int						sock_fd;
+	ssize_t					received;
+	t_timespec				sent_at;
+	t_timespec				received_at;
+	double					rtt_ms;
+	double					elapsed_s;
+	t_IcmpProbe 			probes[1024] = {0};
+	t_IcmpProbe				*matched_probe = NULL;
+	size_t					used_count = 0;
+	t_timespec 				deadline;
+	int						reply_count = 0;
+	double 					loss_percentage = 0.0;
+	double					rtt_total = 0.0;
+	double					rtt_min = 0.0;
+	double					rtt_max = 0.0;
+    struct sigaction 		sa = {0};
+	int 					i;
 
 	sock_fd = icmp_open_socket();
 	if (sock_fd == -1)
 		return (1);
 
-	for(int i = 1; i <= 4; ++i)
+	sa.sa_handler = handler;
+	sigemptyset(&sa.sa_mask);
+
+    sigaction(SIGINT, &sa, NULL);
+
+	i = 1;
+	while(i <= 4 && stop_requested == 0)
 	{
+
 		icmp_create_header(&icmp_header, i);
 
 		if(clock_gettime(CLOCK_MONOTONIC, &sent_at) == -1)	 // RTT countdown start
@@ -77,9 +98,8 @@ int	icmp_exec(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 			deadline.tv_sec += 2;
 		}
 
-		while (1) // receive replies until deadline
+		while (stop_requested == 0) // receive replies until deadline or Ctrl-C
 		{
-
 			received = icmp_receive(sock_fd, &icmp_header, resolved_addr, &deadline, probes, used_count, &matched_probe);
 			if(received == -1)
 			{
@@ -99,9 +119,29 @@ int	icmp_exec(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 			rtt_ms = (received_at.tv_sec - matched_probe->sent_at.tv_sec) * 1000.0; // convert s to ms
 			rtt_ms += (received_at.tv_nsec - matched_probe->sent_at.tv_nsec) / 1000000.0; // convert nanoseconds to ms, add the diff
 
-			printf("REPLY seq=%u time=%.3f ms\n",
-				(unsigned int)matched_probe->sequence, rtt_ms);
+			if (reply_count == 0 || rtt_ms < rtt_min)
+				rtt_min = rtt_ms;
+			if (reply_count == 0 || rtt_ms > rtt_max)
+				rtt_max = rtt_ms;
+			rtt_total += rtt_ms;
+			reply_count += 1;			// increase counter to calculate packet loss %
+
+			printf("REPLY seq=%u time=%.3f ms\n", (unsigned int)matched_probe->sequence, rtt_ms);
+
 		}
+		++i;
+	}
+
+	if (used_count > 0)
+	{
+		loss_percentage = (used_count - reply_count) * 100.0 / used_count;
+	}
+
+	printf("%zu packets transmitted, %d received, %g%% packet loss\n", used_count, reply_count, loss_percentage);
+
+	if (reply_count > 0)
+	{
+		printf("rtt min/avg/max = %.3f/%.3f/%.3f ms\n", rtt_min, rtt_total / reply_count, rtt_max);
 	}
 
 

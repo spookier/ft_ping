@@ -43,6 +43,8 @@ static int	icmp_wait_for_packet(int sock_fd, const t_timespec *deadline)
 	ret = poll(&poll_fd, 1, timeout_ms);
 	if(ret == -1)
 	{
+		if (errno == EINTR)
+			return (-1);
 		printf("ft_ping: poll: %s\n", strerror(errno));
 		return (-1);
 	}
@@ -56,6 +58,7 @@ static int	icmp_wait_for_packet(int sock_fd, const t_timespec *deadline)
 	return (1);
 }
 
+// returns reply size, 0 when stopped or deadline reached, or -1 on error
 ssize_t	icmp_receive(int sock_fd, const struct icmphdr *icmp_header, const t_addrinfo *resolved_addr, const t_timespec *deadline, t_IcmpProbe *probes, size_t used_count, t_IcmpProbe **matched_probe) // receives packet
 {
 	unsigned char				buffer[2048];
@@ -73,7 +76,15 @@ ssize_t	icmp_receive(int sock_fd, const struct icmphdr *icmp_header, const t_add
 
 	while(1)		// awaiting packet loop
 	{
+		if (stop_requested)
+			return (0);
 		ret = icmp_wait_for_packet(sock_fd, deadline);
+		if (ret == -1 && errno == EINTR)
+		{
+			if (stop_requested)
+				return (0);
+			continue ;
+		}
 		if (ret <= 0)
 			return (ret);
 
@@ -81,6 +92,12 @@ ssize_t	icmp_receive(int sock_fd, const struct icmphdr *icmp_header, const t_add
 		received = recvfrom(sock_fd, buffer, sizeof(buffer), 0,(struct sockaddr *)&sender, &sender_len);
 		if (received == -1)
 		{
+			if (errno == EINTR)
+			{
+				if (stop_requested)
+					return (0);
+				continue ;
+			}
 			perror("ft_ping: recv");
 			return (-1);
 		}
@@ -102,7 +119,7 @@ ssize_t	icmp_receive(int sock_fd, const struct icmphdr *icmp_header, const t_add
 					continue ;
 
 				*matched_probe = probe;  // make it possible for icmp_exec() to know which saved probe received the reply
-				return(received);
+				return(received);		// positive received value = reply successfull
 			}
 		}
 		else					// this packet is something else, so reloop

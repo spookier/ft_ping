@@ -15,6 +15,9 @@
 # include <netinet/in.h>
 # include <netinet/ip.h>
 # include <netinet/ip_icmp.h>
+#include <signal.h>
+
+extern volatile sig_atomic_t stop_requested;
 
 typedef struct timespec	t_timespec;
 
