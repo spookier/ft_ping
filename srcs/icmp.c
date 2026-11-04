@@ -1,5 +1,7 @@
 #include "icmp.h"
 
+#define PROBE_CAPACITY 1024
+
 volatile sig_atomic_t	stop_requested = 0;			// signal variable for ctrl+c
 
 static int	icmp_open_socket() // opens a raw socket for ICMP packets
@@ -32,10 +34,11 @@ int	icmp_exec(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 	int						sock_fd;
 	ssize_t					received;
 	t_timespec				sent_at;
+	t_timespec				started_at;
 	t_timespec				received_at;
 	double					rtt_ms;
 	double					elapsed_s;
-	t_IcmpProbe 			probes[1024] = {0};
+	t_IcmpProbe 			probes[PROBE_CAPACITY] = {0};
 	t_IcmpProbe				*matched_probe = NULL;
 	size_t					used_count = 0;
 	t_timespec 				deadline;
@@ -46,6 +49,8 @@ int	icmp_exec(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 	double					rtt_max = 0.0;
     struct sigaction 		sa = {0};
 	int 					i;
+	int						total_sent = 0;
+	int						next_slot = 0;
 
 	sock_fd = icmp_open_socket();
 	if (sock_fd == -1)
@@ -61,10 +66,16 @@ int	icmp_exec(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 		return (1);
 	}
 
-	i = 1;
-	while(i <= 4 && stop_requested == 0)
+	if (clock_gettime(CLOCK_MONOTONIC, &started_at) == -1)
 	{
+		perror("ft_ping: clock_gettime");
+		close(sock_fd);
+		return (1);
+	}
 
+	i = 1;
+	while (stop_requested == 0)
+	{
 		icmp_create_header(&icmp_header, i);
 
 		if(clock_gettime(CLOCK_MONOTONIC, &sent_at) == -1)	 // RTT countdown start
@@ -82,26 +93,27 @@ int	icmp_exec(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 		}
 
 		// save the request we just sent in our storage to compare it with replied one later
-		probes[used_count].sequence = ntohs(icmp_header.un.echo.sequence);
-		probes[used_count].sent_at = sent_at;
-		used_count += 1;
-
-		// temporary diagnostics: time each send relative to the first probe
-		elapsed_s = (double)(sent_at.tv_sec - probes[0].sent_at.tv_sec);
-		elapsed_s += (sent_at.tv_nsec - probes[0].sent_at.tv_nsec) / 1000000000.0;
-		printf("SEND seq=%u elapsed=%.3f s\n",
-			(unsigned int)probes[used_count - 1].sequence, elapsed_s);
-
-		if (i < 4) // set the deadline to the next request's scheduled time
+		if(next_slot >= PROBE_CAPACITY)		// reset ring buffer
 		{
-			deadline = probes[0].sent_at;
-			deadline.tv_sec += i;
+			next_slot = 0;
 		}
-		else // set the deadline to two seconds after the last request
-		{
-			deadline = sent_at;
-			deadline.tv_sec += 2;
-		}
+		probes[next_slot].replied = 0;
+		probes[next_slot].sequence = ntohs(icmp_header.un.echo.sequence);
+		probes[next_slot].sent_at = sent_at;
+		total_sent++;					// count all packets sent
+
+		if (used_count < PROBE_CAPACITY)		// cap our ring buffer to not search beyond array
+			used_count++;
+
+		// temporary diagnostics: time each send relative to the loop start
+		elapsed_s = (double)(sent_at.tv_sec - started_at.tv_sec);
+		elapsed_s += (sent_at.tv_nsec - started_at.tv_nsec) / 1000000000.0;
+		printf("SEND seq=%u elapsed=%.3f s\n", (unsigned int)probes[next_slot].sequence, elapsed_s);
+
+		next_slot++;					// advance index for next ring buffer replacement
+
+		deadline = started_at;
+		deadline.tv_sec += i;
 
 		while (stop_requested == 0) // receive replies until deadline or Ctrl-C
 		{
@@ -132,17 +144,16 @@ int	icmp_exec(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 			reply_count += 1;			// increase counter to calculate packet loss %
 
 			printf("REPLY seq=%u time=%.3f ms\n", (unsigned int)matched_probe->sequence, rtt_ms);
-
 		}
 		++i;
 	}
 
-	if (used_count > 0)
+	if (total_sent > 0)
 	{
-		loss_percentage = (used_count - reply_count) * 100.0 / used_count;
+		loss_percentage = (total_sent - reply_count) * 100.0 / total_sent;
 	}
 
-	printf("%zu packets transmitted, %d received, %g%% packet loss\n", used_count, reply_count, loss_percentage);
+	printf("%d packets transmitted, %d received, %g%% packet loss\n", total_sent, reply_count, loss_percentage);
 
 	if (reply_count > 0)
 	{
