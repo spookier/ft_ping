@@ -1,5 +1,8 @@
 #include "icmp.h"
 
+#include <string.h>
+#include <unistd.h>
+
 static uint16_t icmp_checksum(const void *data, size_t len) // calculates a value used to check if the packet was damaged
 {
 	const uint8_t	*buf = data;
@@ -22,7 +25,7 @@ static uint16_t icmp_checksum(const void *data, size_t len) // calculates a valu
 	return ((uint16_t)~sum);
 }
 
-void icmp_create_header(struct icmphdr *icmp_header, int sequence_nb) // sets up the ICMP header
+void icmp_create_header(struct icmphdr *icmp_header, uint16_t sequence_nb) // sets up the ICMP header
 {
 	uint16_t identifier;
 
@@ -38,7 +41,7 @@ void icmp_create_header(struct icmphdr *icmp_header, int sequence_nb) // sets up
 
 int	icmp_inspect_packet(const unsigned char *buffer, size_t received, const struct icmphdr *icmp_header, uint16_t *reply_sequence) // inspects the received packet
 {
-	size_t			ipv4_len;
+	size_t			ipv4len;
 	struct icmphdr 	icmp_reply;
 
 
@@ -46,21 +49,21 @@ int	icmp_inspect_packet(const unsigned char *buffer, size_t received, const stru
 		return (-1);
 
 	// [IP HEADER][ICMP HEADER]
-	ipv4_len = (buffer[0] & 0x0F) * 4; // we get the last half-byte, * 4 to know end of IPv4 packet
+	ipv4len = (buffer[0] & 0x0F) * 4; // we get the last half-byte, * 4 to know end of IPv4 packet
 
-	if (ipv4_len < 20) // an IPv4 header must be at least 20 bytes
+	if (ipv4len < 20) // an IPv4 header must be at least 20 bytes
 		return (-1);
 
-	if (received < ipv4_len + 8) // check if we got the IP header + 8 bytes for ICMP header
+	if (received < ipv4len + 8) // check if we got the IP header + 8 bytes for ICMP header
 		return (-1);
 
-	if(buffer[ipv4_len] == ICMP_ECHOREPLY)
+	if(buffer[ipv4len] == ICMP_ECHOREPLY)
 	{
-		memcpy(&icmp_reply, &buffer[ipv4_len], sizeof(icmp_reply)); // we transform buffer into a struct for ez access
+		memcpy(&icmp_reply, &buffer[ipv4len], sizeof(icmp_reply)); // we transform buffer into a struct for ez access
 
 		if(icmp_reply.code == 0 && icmp_reply.un.echo.id == icmp_header->un.echo.id) // check if reply is same as request
 		{
-			if(icmp_checksum(&buffer[ipv4_len], received - ipv4_len) == 0) // checks for corruption, if ICMP is intact
+			if(icmp_checksum(&buffer[ipv4len], received - ipv4len) == 0) // checks for corruption, if ICMP is intact
 			{
 				*reply_sequence = ntohs(icmp_reply.un.echo.sequence);		// save our received seq to compare it with storage
 				return(0);

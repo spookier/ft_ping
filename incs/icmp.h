@@ -3,19 +3,14 @@
 
 # include "ft_ping.h"
 
-# include <unistd.h>
-# include <stdio.h>
-# include <string.h>
-# include <time.h>
-# include <poll.h>
-# include <errno.h>
+# include <inttypes.h>
 # include <sys/types.h>
-# include <sys/socket.h>
-# include <sys/time.h>
-# include <netinet/in.h>
-# include <netinet/ip.h>
+# include <time.h>
 # include <netinet/ip_icmp.h>
 #include <signal.h>
+
+# define ICMP_HEADER_LEN 8
+# define PAYLOAD_LEN (64 - ICMP_HEADER_LEN) // 64 byte ICMP packet - 8 byte header = 56
 
 extern volatile sig_atomic_t stop_requested;
 
@@ -29,8 +24,15 @@ typedef struct IcmpProbe
 
 } t_IcmpProbe;
 
+typedef struct s_icmp_packet
+{
+	struct icmphdr	header;
+	uint8_t			payload[PAYLOAD_LEN];
+}	t_icmp_packet;
+
+
 int	icmp_exec(t_addrinfo *resolved_addr);
-void icmp_create_header(struct icmphdr *icmp_header, int sequence_nb);
+void icmp_create_header(struct icmphdr *icmp_header, uint16_t sequence_nb);
 int	icmp_inspect_packet(const unsigned char *buffer, size_t received,
 		const struct icmphdr *icmp_header, uint16_t *reply_sequence);
 ssize_t	icmp_receive(int sock_fd, const struct icmphdr *icmp_header,

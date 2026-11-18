@@ -1,5 +1,11 @@
 #include "icmp.h"
 
+#include <stdio.h>
+#include <string.h>
+#include <poll.h>
+#include <errno.h>
+#include <sys/socket.h>
+
 static t_IcmpProbe *find_probe(t_IcmpProbe *probes, uint16_t target, size_t used_count) // finds a saved probe by its sequence number
 {
 	for(size_t i = 0; i < used_count; ++i)
