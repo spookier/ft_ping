@@ -65,7 +65,7 @@ static int	icmp_wait_for_packet(int sock_fd, const t_timespec *deadline)
 }
 
 // returns reply size, 0 when stopped or deadline reached, or -1 on error
-ssize_t	icmp_receive(int sock_fd, const struct icmphdr *icmp_header, const t_addrinfo *resolved_addr, const t_timespec *deadline, t_IcmpProbe *probes, size_t used_count, t_IcmpProbe **matched_probe) // receives packet
+ssize_t	icmp_receive(int sock_fd, const t_icmp_packet *icmp_packet, const t_addrinfo *resolved_addr, const t_timespec *deadline, t_IcmpProbe *probes, size_t used_count, t_IcmpProbe **matched_probe) // receives packet
 {
 	unsigned char				buffer[2048];
 	struct sockaddr_in 			sender;
@@ -108,7 +108,7 @@ ssize_t	icmp_receive(int sock_fd, const struct icmphdr *icmp_header, const t_add
 			return (-1);
 		}
 
-		ret = icmp_inspect_packet(buffer, (size_t)received, icmp_header, &reply_sequence);
+		ret = icmp_inspect_packet(buffer, (size_t)received, icmp_packet, &reply_sequence);
 		if (ret == 0) // this packet is an answer to my ping
 		{
 			if(sender.sin_addr.s_addr == destination->sin_addr.s_addr)	// checks if packet is from the IP we pinged

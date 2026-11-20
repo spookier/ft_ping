@@ -22,9 +22,9 @@ static int	icmp_open_socket() // opens a raw socket for ICMP packets
 	return (sock_fd);
 }
 
-static ssize_t	icmp_send(int sock_fd, struct icmphdr *icmp_header, t_addrinfo *resolved_addr) // sends the ICMP header to destination
+static ssize_t	icmp_send(int sock_fd, t_icmp_packet *icmp_packet, t_addrinfo *resolved_addr) // sends the ICMP header to destination
 {
-	return(sendto(sock_fd, icmp_header, sizeof(*icmp_header), 0, resolved_addr->ai_addr, resolved_addr->ai_addrlen));
+	return(sendto(sock_fd, icmp_packet, sizeof(*icmp_packet), 0, resolved_addr->ai_addr, resolved_addr->ai_addrlen));
 }
 
 void handler(int sig)
@@ -35,7 +35,7 @@ void handler(int sig)
 
 int	icmp_exec(t_addrinfo *resolved_addr) // opens the socket, prepares the header, sends it and waits for a packet
 {
-	struct icmphdr			icmp_header;
+	t_icmp_packet			icmp_packet;
 	int						sock_fd;
 	ssize_t					received;
 	t_timespec				sent_at;
@@ -83,7 +83,7 @@ int	icmp_exec(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 	sequence = 1;
 	while (stop_requested == 0)
 	{
-		icmp_create_header(&icmp_header, sequence);
+		icmp_create_packet(&icmp_packet, sequence);
 
 		if(clock_gettime(CLOCK_MONOTONIC, &sent_at) == -1)	 // RTT countdown start
 		{
@@ -92,7 +92,7 @@ int	icmp_exec(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 			return(1);
 		}
 
-		if(icmp_send(sock_fd, &icmp_header, resolved_addr) == -1)
+		if(icmp_send(sock_fd, &icmp_packet, resolved_addr) == -1)
 		{
 			perror("ft_ping: sendto");
 			close(sock_fd);
@@ -105,7 +105,7 @@ int	icmp_exec(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 			next_slot = 0;
 		}
 		probes[next_slot].replied = 0;
-		probes[next_slot].sequence = ntohs(icmp_header.un.echo.sequence);
+		probes[next_slot].sequence = ntohs(icmp_packet.header.un.echo.sequence);
 		probes[next_slot].sent_at = sent_at;
 		total_sent++;					// count all packets sent
 
@@ -121,7 +121,7 @@ int	icmp_exec(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 
 		while (stop_requested == 0) // receive replies until deadline or Ctrl-C
 		{
-			received = icmp_receive(sock_fd, &icmp_header, resolved_addr, &deadline, probes, used_count, &matched_probe);
+			received = icmp_receive(sock_fd, &icmp_packet, resolved_addr, &deadline, probes, used_count, &matched_probe);
 			if(received == -1)
 			{
 				close(sock_fd);

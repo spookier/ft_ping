@@ -25,21 +25,26 @@ static uint16_t icmp_checksum(const void *data, size_t len) // calculates a valu
 	return ((uint16_t)~sum);
 }
 
-void icmp_create_header(struct icmphdr *icmp_header, uint16_t sequence_nb) // sets up the ICMP header
+void icmp_create_packet(t_icmp_packet *packet, uint16_t sequence_nb) // sets up the ICMP packet
 {
 	uint16_t identifier;
 
-	memset(icmp_header, 0, sizeof(*icmp_header));
+	memset(packet, 0, sizeof(*packet));
 
-	icmp_header->type = ICMP_ECHO;
+	packet->header.type = ICMP_ECHO;
 
 	identifier = getpid() & 0xFFFF;
-	icmp_header->un.echo.id = htons(identifier);
-	icmp_header->un.echo.sequence = htons(sequence_nb);
-	icmp_header->checksum = htons(icmp_checksum(icmp_header, sizeof(*icmp_header)));
+	packet->header.un.echo.id = htons(identifier);
+	packet->header.un.echo.sequence = htons(sequence_nb);
+
+	memcpy(packet->payload, "HELLO", strlen("HELLO"));		// adds HELLO as payload
+
+	packet->header.checksum = htons(icmp_checksum(packet, sizeof(*packet)));
+
+
 }
 
-int	icmp_inspect_packet(const unsigned char *buffer, size_t received, const struct icmphdr *icmp_header, uint16_t *reply_sequence) // inspects the received packet
+int	icmp_inspect_packet(const unsigned char *buffer, size_t received, const t_icmp_packet *icmp_packet, uint16_t *reply_sequence) // inspects the received packet
 {
 	size_t			ipv4len;
 	struct icmphdr 	icmp_reply;
@@ -61,7 +66,7 @@ int	icmp_inspect_packet(const unsigned char *buffer, size_t received, const stru
 	{
 		memcpy(&icmp_reply, &buffer[ipv4len], sizeof(icmp_reply)); // we transform buffer into a struct for ez access
 
-		if(icmp_reply.code == 0 && icmp_reply.un.echo.id == icmp_header->un.echo.id) // check if reply is same as request
+		if(icmp_reply.code == 0 && icmp_reply.un.echo.id == icmp_packet->header.un.echo.id) // check if reply is same as request
 		{
 			if(icmp_checksum(&buffer[ipv4len], received - ipv4len) == 0) // checks for corruption, if ICMP is intact
 			{
