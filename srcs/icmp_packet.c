@@ -41,14 +41,13 @@ void icmp_create_packet(t_icmp_packet *packet, uint16_t sequence_nb) // sets up 
 
 	packet->header.checksum = htons(icmp_checksum(packet, sizeof(*packet)));
 
-
 }
 
 int	icmp_inspect_packet(const unsigned char *buffer, size_t received, const t_icmp_packet *icmp_packet, uint16_t *reply_sequence) // inspects the received packet
 {
 	size_t			ipv4len;
 	struct icmphdr 	icmp_reply;
-
+	size_t 			payload_len;
 
 	if (received < 20 || (buffer[0] >> 4) != 4)	// checks if first half-byte is IPv4
 		return (-1);
@@ -62,12 +61,22 @@ int	icmp_inspect_packet(const unsigned char *buffer, size_t received, const t_ic
 	if (received < ipv4len + 8) // check if we got the IP header + 8 bytes for ICMP header
 		return (-1);
 
+	payload_len = received - ipv4len - sizeof(struct icmphdr);		// calculate received payload size
+
+
 	if(buffer[ipv4len] == ICMP_ECHOREPLY)
 	{
 		memcpy(&icmp_reply, &buffer[ipv4len], sizeof(icmp_reply)); // we transform buffer into a struct for ez access
 
 		if(icmp_reply.code == 0 && icmp_reply.un.echo.id == icmp_packet->header.un.echo.id) // check if reply is same as request
 		{
+
+			if(payload_len != sizeof(icmp_packet->payload))		// check if sent payload same size as received
+				return(2);
+
+			if(memcmp(&buffer[ipv4len + sizeof(struct icmphdr)], icmp_packet->payload, sizeof(icmp_packet->payload)) != 0)	// check if sent payload same content as received
+				return(2);
+
 			if(icmp_checksum(&buffer[ipv4len], received - ipv4len) == 0) // checks for corruption, if ICMP is intact
 			{
 				*reply_sequence = ntohs(icmp_reply.un.echo.sequence);		// save our received seq to compare it with storage

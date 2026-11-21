@@ -5,6 +5,7 @@
 #include <poll.h>
 #include <errno.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
 
 static t_IcmpProbe *find_probe(t_IcmpProbe *probes, uint16_t target, size_t used_count) // finds a saved probe by its sequence number
 {
@@ -65,7 +66,7 @@ static int	icmp_wait_for_packet(int sock_fd, const t_timespec *deadline)
 }
 
 // returns reply size, 0 when stopped or deadline reached, or -1 on error
-ssize_t	icmp_receive(int sock_fd, const t_icmp_packet *icmp_packet, const t_addrinfo *resolved_addr, const t_timespec *deadline, t_IcmpProbe *probes, size_t used_count, t_IcmpProbe **matched_probe) // receives packet
+ssize_t	icmp_receive(int sock_fd, const t_icmp_packet *icmp_packet, const t_addrinfo *resolved_addr, const t_timespec *deadline, t_IcmpProbe *probes, size_t used_count, t_IcmpProbe **matched_probe, t_reply_info *reply_info) // receives packet
 {
 	unsigned char				buffer[2048];
 	struct sockaddr_in 			sender;
@@ -95,7 +96,7 @@ ssize_t	icmp_receive(int sock_fd, const t_icmp_packet *icmp_packet, const t_addr
 			return (ret);
 
 		sender_len = sizeof(sender);
-		received = recvfrom(sock_fd, buffer, sizeof(buffer), 0,(struct sockaddr *)&sender, &sender_len);
+		received = recvfrom(sock_fd, buffer, sizeof(buffer), 0,(struct sockaddr *)&sender, &sender_len); // buffer holds IPv4 packet then IMCP
 		if (received == -1)
 		{
 			if (errno == EINTR)
@@ -125,6 +126,13 @@ ssize_t	icmp_receive(int sock_fd, const t_icmp_packet *icmp_packet, const t_addr
 					continue ;
 
 				*matched_probe = probe;  // make it possible for icmp_exec() to know which saved probe received the reply
+
+				// we save info about the reply in a struct to give to icmp_exec()
+				reply_info->icmp_len = (size_t)received - (buffer[0] & 0x0F) * 4;	// reply size of ICMP header+payload
+				reply_info->ttl = buffer[8];										// TTL (router hops), starts at 64 for example and -1 for each router hop until 0. if 0 = discard packet
+
+				inet_ntop(AF_INET, &sender.sin_addr, reply_info->addr, sizeof(reply_info->addr));
+
 				return(received);		// positive received value = reply successfull
 			}
 		}

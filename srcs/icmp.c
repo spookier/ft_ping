@@ -45,6 +45,7 @@ int	icmp_exec(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 	double					elapsed_s;
 	t_IcmpProbe 			probes[PROBE_CAPACITY] = {0};
 	t_IcmpProbe				*matched_probe = NULL;
+	t_reply_info			reply_info;
 	size_t					used_count = 0;
 	t_timespec 				deadline;
 	uint64_t				reply_count = 0;
@@ -121,7 +122,7 @@ int	icmp_exec(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 
 		while (stop_requested == 0) // receive replies until deadline or Ctrl-C
 		{
-			received = icmp_receive(sock_fd, &icmp_packet, resolved_addr, &deadline, probes, used_count, &matched_probe);
+			received = icmp_receive(sock_fd, &icmp_packet, resolved_addr, &deadline, probes, used_count, &matched_probe, &reply_info);
 			if(received == -1)
 			{
 				close(sock_fd);
@@ -147,7 +148,7 @@ int	icmp_exec(t_addrinfo *resolved_addr) // opens the socket, prepares the heade
 			rtt_total += rtt_ms;
 			reply_count += 1;			// increase counter to calculate packet loss %
 
-			printf("REPLY seq=%u time=%.3f ms\n", (unsigned int)matched_probe->sequence, rtt_ms);
+			printf("REPLY %zu bytes from %s: icmp_seq=%u ttl=%u time=%.3f ms\n", reply_info.icmp_len, reply_info.addr, (unsigned int)matched_probe->sequence, (unsigned int)reply_info.ttl, rtt_ms);
 		}
 		deadline.tv_sec += 1;
 		++sequence;
